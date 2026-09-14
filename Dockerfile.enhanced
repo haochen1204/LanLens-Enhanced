@@ -1,4 +1,4 @@
-# LanLens Enhanced v5
+# LanLens Enhanced v6
 # Builds from the preserved LanLens v1.5.9 source tree, then applies the enhancement layer.
 
 # ─── Stage 1: Build React frontend from upstream source ───────────────────────
@@ -7,7 +7,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 ARG LANLENS_APP_VERSION=1.5.9
-ARG LANLENS_BUILD_CODE=enhanced-v5
+ARG LANLENS_BUILD_CODE=enhanced-v6
 ARG LANLENS_BUILD_COMMIT=unknown
 ARG LANLENS_BUILD_BRANCH=LanLens-Enhanced
 ARG LANLENS_BUILD_CREATED=unknown
@@ -30,13 +30,13 @@ RUN npm run build
 FROM python:3.12-slim
 
 ARG LANLENS_APP_VERSION=1.5.9
-ARG LANLENS_BUILD_CODE=enhanced-v5
+ARG LANLENS_BUILD_CODE=enhanced-v6
 ARG LANLENS_BUILD_COMMIT=unknown
 ARG LANLENS_BUILD_BRANCH=LanLens-Enhanced
 ARG LANLENS_BUILD_CREATED=unknown
 
 LABEL org.opencontainers.image.title="LanLens Enhanced" \
-      org.opencontainers.image.description="LanLens v1.5.9 with automatic service discovery, port state tracking and Chinese notifications" \
+      org.opencontainers.image.description="LanLens v1.5.9 with automatic service discovery, port state tracking and Chinese notifications/network changes" \
       org.opencontainers.image.version=$LANLENS_APP_VERSION \
       org.opencontainers.image.revision=$LANLENS_BUILD_COMMIT \
       org.opencontainers.image.created=$LANLENS_BUILD_CREATED \
@@ -80,6 +80,7 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 COPY enhancements/runtime/auto_services_extension.py /app/backend/services/auto_services_extension.py
 COPY enhancements/runtime/auto_services_api.py /app/backend/routers/auto_services_api.py
 COPY enhancements/runtime/lanlens-auto-services-ui-v5.js /app/frontend/dist/lanlens-auto-services-ui-v5.js
+COPY enhancements/runtime/lanlens-changes-zh-v6.js /app/frontend/dist/lanlens-changes-zh-v6.js
 COPY enhancements/runtime/patch_runtime.py /tmp/patch_runtime.py
 RUN python /tmp/patch_runtime.py && rm -f /tmp/patch_runtime.py
 
