@@ -1,0 +1,22 @@
+services:
+  lanlens:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced
+      args:
+        LANLENS_APP_VERSION: "1.5.9"
+        LANLENS_BUILD_CODE: "enhanced-v5"
+    image: lanlens:enhanced-v5
+    container_name: lanlens
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      LANLENS_PORT: "${LANLENS_PORT:-8089}"
+      BACKEND_PORT: "${BACKEND_PORT:-18089}"
+      TZ: "${TZ:-Asia/Shanghai}"
+      LANLENS_AUTO_DISCOVER_SERVICES: "1"
+    volumes:
+      - "${LANLENS_DATA_DIR:-/vol4/1000/应用数据/lanlens}:/data"
