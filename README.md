@@ -1,16 +1,22 @@
 # LanLens Enhanced
 
-基于 [AlexRosbach/LanLens](https://github.com/AlexRosbach/LanLens) **v1.5.9** 的增强版本。
+基于 [AlexRosbach/LanLens](https://github.com/AlexRosbach/LanLens) **v1.5.9** 的增强版本，重点增强端口扫描后的服务资产维护、端口状态变化通知和中文通知体验。
 
-本仓库完整保留 LanLens v1.5.9 的上游源码，同时将我们实际使用的 **Auto Services v5** 增强层独立放在 `enhancements/runtime/` 中。这样既能直接查看原版代码，也能明确看到本项目到底修改了什么。
+> 上游基线：`AlexRosbach/LanLens v1.5.9`  
+> 固定提交：`b8fa87166ed39ff6f35305fbca6dec6ead7eda20`
 
-> 上游基线：LanLens v1.5.9 / commit `b8fa87166ed39ff6f35305fbca6dec6ead7eda20`
+本仓库没有把原项目代码直接改乱，而是采用两层结构：
 
-## 我们增加了什么
+- `upstream/`：Git submodule，固定保存完整的 LanLens v1.5.9 源代码；
+- `enhancements/runtime/`：我们新增的 Auto Services v5 增强代码。
 
-### 1. 端口扫描结果自动生成 Service
+这样可以同时保留 LanLens 原始源码，又能清楚看出我们到底修改了什么。
 
-原版 LanLens 的端口扫描结果与 Services 目录是两个相对独立的功能。本版本会在端口扫描完成后，把新发现的开放端口自动映射成 Service。
+## 主要修改
+
+### 1. 端口扫描结果自动创建 Service
+
+原版 LanLens 的端口扫描和 Services 资产目录相对独立。本版本在端口扫描完成后，会把新发现的开放端口自动映射为 Service。
 
 例如扫描发现：
 
@@ -20,102 +26,154 @@
 192.168.1.11:65443/TCP https
 ```
 
-Services 中会自动建立对应条目，并根据常见协议推断名称、类型、协议和 URL。
-
-自动创建后，用户仍然可以手工修改：
+会自动生成对应 Service，并根据端口和 nmap service name 推断：
 
 - 服务名称
+- 服务类型
+- TCP / UDP
+- HTTP / HTTPS URL
+- 常见协议类型
+
+已支持常见的 SSH、HTTP、HTTPS、DNS、RDP、SMB、FTP、MySQL、PostgreSQL、Redis、MongoDB、VNC、SNMP、NTP、EPMD、WinBox、WS-Discovery 等。
+
+### 2. 不覆盖人工修改
+
+自动发现 Service 后，可以继续人工修改：
+
+- 名称
 - 描述
 - 分组
 - URL
 - 备注
-- 账号提示等字段
+- 登录提示等
 
-**后续扫描不会覆盖这些人工修改。**
+后续端口扫描只维护端口状态和映射关系，**不会覆盖这些人工字段**。
 
-### 2. TCP / UDP 独立跟踪
+### 3. TCP / UDP 分开跟踪
 
-同一端口的 TCP 与 UDP 状态分别记录。例如 `53/TCP` 与 `53/UDP` 不会被当成同一个服务状态。
+状态唯一键为：
 
-增强层使用独立表：
+```text
+device_id + transport + port
+```
+
+因此：
+
+```text
+53/TCP
+53/UDP
+```
+
+会被当作两个独立端点。
+
+增强层新增独立状态表：
 
 ```text
 lanlens_auto_service_status
 ```
 
-不修改 LanLens 原有数据表结构，已有数据库可以继续使用。
+不会修改 LanLens 原有数据表结构。
 
-### 3. Service 在线 / 离线状态
+### 4. Service 在线 / 离线状态
 
-扫描到端口开放时显示：
+Service 卡片会增加状态：
 
 ```text
 ● 在线
-```
-
-明确扫描到端口关闭后显示：
-
-```text
 ● 离线
+● 未检测
 ```
 
-状态颜色：
+显示规则：
 
 - 在线：绿色
 - 离线：红色
 - 未检测：灰色
 
-### 4. 新端口与端口离线通知
+同时记录最近检查时间和最近开放时间。
 
-新增端口时生成通知：
+### 5. 新端口通知
+
+第一次发现以前没有跟踪过的开放端口时，新增通知，例如：
 
 ```text
 发现新端口：192.168.1.11:61208/TCP（Glances）
 ```
 
-已跟踪端口由在线变成离线时生成：
+端口保持开放不会每轮重复通知。
+
+### 6. 端口离线通知
+
+已跟踪端口从在线变成离线时新增通知，例如：
 
 ```text
 端口离线：192.168.1.11:65443/TCP（SafeLine Health Check）
 ```
 
-通知采用状态切换逻辑：
+只有发生：
 
-- 第一次发现开放端口：通知一次
-- 持续在线：不重复通知
-- 在线 → 离线：通知一次
-- 持续离线：不重复通知
-- 离线 → 再次在线：恢复在线状态，不再次当成“新端口”刷通知
+```text
+在线 → 离线
+```
 
-同时避免一个重要误判：`top:N` 扫描没有覆盖到的高位端口，不会因为本轮未出现就被错误判定为离线。
+时通知一次，持续离线不会刷屏。
 
-### 5. 中文模式下通知正文中文化
+端口重新开放时恢复在线状态，但不会重新当成“新端口”通知。
 
-LanLens v1.5.9 原版通知标签支持 i18n，但不少后端生成的通知正文仍然是英文。
+### 7. 避免误判高位端口离线
 
-本版本在中文模式下对常见通知进行中文展示，包括：
+这是本版本端口状态逻辑里比较重要的一点。
+
+对于明确范围扫描，例如：
+
+```text
+22,80,443,8000-9000
+```
+
+该范围内端口本轮没有开放，可以认为对应 TCP 端口已被明确扫描，因此允许更新为离线。
+
+但是对于：
+
+```text
+top:1000
+```
+
+LanLens/nmap 只扫描常见端口集合，不能证明某个自定义高位端口真的被扫描过。
+
+所以本版本不会因为 `top:N` 结果里没出现某个高位端口，就把它错误标成离线。
+
+单端口扫描则只更新指定端口。
+
+### 8. 中文通知正文
+
+LanLens v1.5.9 原版虽然通知页面标签支持中文，但不少通知正文由后端直接生成英文。
+
+本版本在中文模式下增加通知正文本地化，包括：
 
 - 新设备发现
 - IP 地址变化
 - 主机名变化
-- 设备上线 / 离线
-- 归档状态变化
-- MAC 变化
+- 设备上线
+- 设备离线
+- 设备归档/取消归档
+- MAC 地址变化
 - 未知 DHCP Server
 - 新端口发现
 - 端口离线
 
-英文模式保持原文。
+英文模式仍显示原始英文。
 
-### 6. Services 排序优化
+### 9. Services 排序优化
 
-全局 Services 页面按以下顺序排序：
+全局 Services 页面按照：
 
 ```text
-IP 数值顺序 → 端口号 → TCP/UDP → 服务名称
+数值 IP → 端口号 → TCP/UDP → 服务名称
 ```
 
-例如：
+排序。
+
+例如会是：
 
 ```text
 192.168.1.2:22
@@ -125,88 +183,88 @@ IP 数值顺序 → 端口号 → TCP/UDP → 服务名称
 192.168.1.11:61208
 ```
 
-而不是按字符串导致 `192.168.1.11` 排在 `192.168.1.2` 前面。
+而不是按照字符串顺序把 `192.168.1.11` 排到 `192.168.1.2` 前面。
 
-单设备详情页中的 Services 则主要按端口号排序。
+设备详情页中的 Services 主要按端口号排序。
 
-## 端口状态判断逻辑
+## 后台端口扫描逻辑
 
-增强代码不会简单地把“本轮扫描结果中没出现”理解成离线。
-
-对于明确指定的扫描范围，例如：
+例如把后台端口扫描周期设置成：
 
 ```text
-22,80,443,8000-9000
+360 分钟
 ```
 
-只有处在该范围内、且本次确认没有开放的已跟踪端口，才会被更新为离线。
+并不是“每 360 分钟扫描一个 IP”。
 
-对于：
-
-```text
-top:1000
-```
-
-由于无法证明未返回的自定义高端口真的被覆盖扫描，因此不会批量把其它端口标记为离线。
-
-单端口扫描只更新该端口。
-
-## LanLens 后台端口扫描调度逻辑
-
-例如设置后台端口扫描间隔为 `360` 分钟，并不是每 360 分钟只扫描一个 IP。
-
-实际逻辑是：
+LanLens v1.5.9 的逻辑是：
 
 ```text
-每 360 分钟启动一轮任务
+每 360 分钟触发一轮扫描
         ↓
-读取符合条件的设备
+获取符合条件的设备
         ↓
 按 Device ID 排序
         ↓
-依次扫描每个合法 IPv4
+逐台执行端口扫描
+        ↓
+这一轮设备全部完成
 ```
 
-参与后台扫描的设备必须满足：
+后台任务只选择：
 
-- 有 IP 地址
-- 未被 Ignore
-- 未归档
-- 是合法 IPv4
-- 每轮最多 100 台设备
+- 有 IP 地址的设备
+- 未 Ignore 的设备
+- 未归档设备
+- 合法 IPv4
+- 每轮最多 100 台
 
-每轮内部是逐台执行，因此端口范围很大时，排在后面的设备会晚一些完成。
+每轮内部目前是逐台执行，因此如果端口范围很大，排在后面的设备会较晚完成。
 
-## 目录结构
+## 源码结构
 
 ```text
 LanLens-Enhanced/
-├── backend/                    # LanLens v1.5.9 原始后端源码
-├── frontend/                   # LanLens v1.5.9 原始前端源码
-├── nginx/                      # LanLens 原始 Nginx 配置
-├── scripts/                    # LanLens 原始脚本
-├── Dockerfile                  # LanLens v1.5.9 原始 Dockerfile
-├── Dockerfile.enhanced         # 本项目增强版构建文件
-├── docker-compose.yml          # 增强版启动文件
+├── upstream/                   # 完整 LanLens v1.5.9 源码，Git submodule
+│   ├── backend/
+│   ├── frontend/
+│   ├── nginx/
+│   ├── scan-node/
+│   ├── scripts/
+│   └── Dockerfile
 ├── enhancements/
 │   └── runtime/
 │       ├── auto_services_extension.py
 │       ├── auto_services_api.py
 │       ├── lanlens-auto-services-ui-v5.js
 │       └── patch_runtime.py
-├── MODIFICATIONS.md            # 详细修改说明
-└── UPSTREAM_README.md          # 上游项目原 README
+├── Dockerfile.enhanced
+├── docker-compose.yml
+├── .env.example
+├── MODIFICATIONS.md
+└── UPSTREAM.md
 ```
 
-## Docker 构建和启动
+## 获取完整源码
 
-默认数据目录按当前 fnOS 环境设置为：
+推荐：
 
-```text
-/vol4/1000/应用数据/lanlens
+```bash
+git clone --recurse-submodules https://github.com/haochen1204/LanLens-Enhanced.git
+cd LanLens-Enhanced
 ```
 
-构建：
+如果已经普通 clone：
+
+```bash
+git submodule update --init --recursive
+```
+
+`upstream/` 会固定在 LanLens v1.5.9 对应提交，不会因为上游发布新版自动变化。
+
+## Docker 构建
+
+增强版直接使用 `upstream/` 中保存的 LanLens v1.5.9 源码构建，而不是只套一个现成镜像。
 
 ```bash
 docker compose build --pull=false
@@ -218,50 +276,76 @@ docker compose build --pull=false
 docker compose up -d
 ```
 
-如果已有旧容器：
+如果已经有旧的 `lanlens` 容器：
 
 ```bash
 docker rm -f lanlens 2>/dev/null || true
 docker compose up -d
 ```
 
-查看日志：
+查看：
 
 ```bash
+docker ps | grep lanlens
 docker logs -f lanlens
 ```
 
-默认 Web 端口：
+## 默认部署参数
+
+当前 `docker-compose.yml` 默认按照 fnOS 环境设置：
 
 ```text
-8089
+Web:      8089
+Backend:  18089
+Timezone: Asia/Shanghai
+Data:     /vol4/1000/应用数据/lanlens
 ```
 
-默认 Backend 端口：
+可复制：
 
-```text
-18089
+```bash
+cp .env.example .env
 ```
 
-可以复制 `.env.example` 为 `.env` 修改端口和数据目录。
+再自行修改。
 
-## 数据升级说明
-
-增强版继续使用 LanLens 原数据目录 `/data`，不会主动删除原来的：
+继续使用原来的 `/data` 数据目录，所以升级增强版不会主动删除已有：
 
 - 设备
 - Services
-- 服务名称和说明
-- 服务分组
+- 人工服务名称/描述
+- 分组
 - 扫描历史
 - 通知
 
-Auto Services 使用自己的 `lanlens_auto_service_status` 表保存端口状态。
+## 代码注入方式
 
-## 与原版的关系
+`Dockerfile.enhanced` 首先从 `upstream/` 构建 LanLens v1.5.9，然后复制 `enhancements/runtime/` 中的增强文件。
+
+`patch_runtime.py` 在镜像构建阶段对以下上游文件做最小化注入：
+
+```text
+backend/main.py
+backend/routers/devices.py
+backend/routers/services.py
+frontend/dist/index.html
+```
+
+主要注入内容：
+
+- 注册 `/api/services/auto-status`
+- 端口扫描结束后执行 `sync_scan_result()`
+- Service 排序
+- 加载增强 UI JS
+
+这种方式的目的，是让上游源码保持原样，便于后续升级和对比。
+
+详细实现见 [MODIFICATIONS.md](./MODIFICATIONS.md)。
+
+## 上游与许可证
 
 本项目不是 LanLens 官方版本。
 
-上游项目及其原始源码、版权和许可证归原作者所有。仓库保留原项目的 `LICENSE`、`THIRD_PARTY_NOTICES.md` 等文件；本项目只在上游 v1.5.9 基础上维护本地增强功能。
+LanLens 原始源码、版权和许可证归原作者所有。`upstream/` 中完整保留上游 v1.5.9 的源码以及 `LICENSE`、`THIRD_PARTY_NOTICES.md` 等文件。
 
-详细代码改动见 [MODIFICATIONS.md](./MODIFICATIONS.md)。
+上游版本信息见 [UPSTREAM.md](./UPSTREAM.md)。
