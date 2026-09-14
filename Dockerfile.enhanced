@@ -78,9 +78,11 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # ─── Enhancement layer ────────────────────────────────────────────────────────
 COPY enhancements/runtime/auto_services_extension.py /app/backend/services/auto_services_extension.py
+COPY enhancements/runtime/port_change_events_v6.py /app/backend/services/port_change_events_v6.py
 COPY enhancements/runtime/auto_services_api.py /app/backend/routers/auto_services_api.py
 COPY enhancements/runtime/lanlens-auto-services-ui-v5.js /app/frontend/dist/lanlens-auto-services-ui-v5.js
 COPY enhancements/runtime/lanlens-changes-zh-v6.js /app/frontend/dist/lanlens-changes-zh-v6.js
+COPY enhancements/runtime/lanlens-port-changes-ui-v6.js /app/frontend/dist/lanlens-port-changes-ui-v6.js
 COPY enhancements/runtime/patch_runtime.py /tmp/patch_runtime.py
 RUN python /tmp/patch_runtime.py && rm -f /tmp/patch_runtime.py
 
