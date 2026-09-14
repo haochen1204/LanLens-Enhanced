@@ -89,6 +89,7 @@ for old in (
 for tag in (
     '<script src="/lanlens-auto-services-ui-v5.js"></script>',
     '<script src="/lanlens-changes-zh-v6.js"></script>',
+    '<script src="/lanlens-port-changes-ui-v6.js"></script>',
 ):
     if tag not in index:
         if "</body>" not in index:
