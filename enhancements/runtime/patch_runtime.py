@@ -71,14 +71,13 @@ services = replace_once(
 old_list = '''    return (\n        db.query(Service)\n        .filter(Service.device_id == device_id)\n        .order_by(Service.sort_order, Service.created_at)\n        .all()\n    )\n'''
 new_list = '''    rows = (\n        db.query(Service)\n        .filter(Service.device_id == device_id)\n        .all()\n    )\n    return sorted(rows, key=service_sort_key)\n'''
 services = replace_once(services, old_list, new_list, "per-device service API sorting")
-# Keep stock query but enforce numeric IP -> effective port -> transport -> name in Python.
 needle = '''    rows = (\n        db.query(Service, Device)\n        .join(Device, Service.device_id == Device.id)\n        .order_by(Service.name, Device.label, Device.hostname, Device.ip_address)\n        .all()\n    )\n    return [\n'''
 replacement = '''    rows = (\n        db.query(Service, Device)\n        .join(Device, Service.device_id == Device.id)\n        .all()\n    )\n    rows.sort(key=lambda pair: (\n        numeric_ip_sort_key(pair[1].ip_address),\n        effective_service_port(pair[0]) if effective_service_port(pair[0]) is not None else 65536,\n        0 if str(pair[0].protocol or "").lower() != "udp" else 1,\n        str(pair[0].name or "").lower(),\n        int(pair[0].id or 0),\n    ))\n    return [\n'''
 services = replace_once(services, needle, replacement, "global service API sorting")
 services_path.write_text(services, encoding="utf-8")
 
 
-# UI enhancer handles status badges, endpoint labels, and Chinese notification localization. Sorting is backend-side.
+# UI enhancers handle status badges, endpoint labels, Chinese notifications and Network Changes localization.
 index_path = Path("/app/frontend/dist/index.html")
 index = index_path.read_text(encoding="utf-8")
 for old in (
@@ -87,11 +86,14 @@ for old in (
     '<script src="/lanlens-auto-services-ui-v4.js"></script>',
 ):
     index = index.replace(old, '')
-tag = '<script src="/lanlens-auto-services-ui-v5.js"></script>'
-if tag not in index:
-    if "</body>" not in index:
-        raise RuntimeError("Could not patch frontend index.html: </body> missing")
-    index = index.replace("</body>", f"  {tag}\n</body>", 1)
+for tag in (
+    '<script src="/lanlens-auto-services-ui-v5.js"></script>',
+    '<script src="/lanlens-changes-zh-v6.js"></script>',
+):
+    if tag not in index:
+        if "</body>" not in index:
+            raise RuntimeError("Could not patch frontend index.html: </body> missing")
+        index = index.replace("</body>", f"  {tag}\n</body>", 1)
 index_path.write_text(index, encoding="utf-8")
 
-print("LanLens auto-services v5 runtime patch applied")
+print("LanLens Enhanced v6 runtime patch applied")
