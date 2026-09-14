@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile.enhanced
       args:
         LANLENS_APP_VERSION: "1.5.9"
-        LANLENS_BUILD_CODE: "enhanced-v5"
-    image: lanlens:enhanced-v5
+        LANLENS_BUILD_CODE: "enhanced-v6"
+    image: lanlens:enhanced-v6
     container_name: lanlens
     restart: unless-stopped
     network_mode: host
